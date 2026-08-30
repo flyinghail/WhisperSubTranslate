@@ -455,6 +455,7 @@ class EnhancedSubtitleTranslator {
       selectedDevice: config.selectedDevice || '',
       selectedTranslation: config.selectedTranslation === 'chatgpt-nano' ? 'chatgpt' : config.selectedTranslation || '',
       selectedTargetLanguage: config.selectedTargetLanguage || '',
+      localModelId: config.localModelId === '7b' ? '7b' : '1.8b',
     };
   }
 
@@ -528,6 +529,7 @@ class EnhancedSubtitleTranslator {
       batchTranslation: true,
       maxConcurrent: this.getOptimalConcurrency(),
       uiLanguage: 'ko',
+      localModelId: '1.8b',
     };
   }
 

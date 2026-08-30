@@ -3215,12 +3215,6 @@ function initTranslationSelect() {
       if (typeof updateLocalModelStatus === 'function') {
         updateLocalModelStatus();
       }
-      // 설정 자동 저장
-      try {
-        window.electronAPI.saveApiKeys({ localModelId: localModelSelect.value });
-      } catch (_e) {
-        /* ignore */
-      }
     });
   }
   // 다국어 체크박스: 패널 토글 배선 + 저장된 선택 복원 + 변경 시 저장·요약 갱신
@@ -3323,12 +3317,14 @@ async function autoSaveSettings() {
     const languageSelect = document.getElementById('languageSelect');
     const deviceSelect = document.getElementById('deviceSelect');
     const translationSelect = document.getElementById('translationSelect');
+    const localModelSelect = document.getElementById('localModelSelect');
     const uiLanguageSelect = document.getElementById('uiLanguageSelect');
 
     if (modelSelect) keys.selectedModel = modelSelect.value;
     if (languageSelect) keys.selectedLanguage = languageSelect.value;
     if (deviceSelect) keys.selectedDevice = deviceSelect.value;
     if (translationSelect) keys.selectedTranslation = translationSelect.value;
+    if (localModelSelect) keys.localModelId = localModelSelect.value;
     if (uiLanguageSelect) keys.uiLanguage = uiLanguageSelect.value;
 
     await window.electronAPI.saveApiKeys(keys);
@@ -3340,7 +3336,7 @@ async function autoSaveSettings() {
 
 // 설정 변경 이벤트 연결
 function initSettingsAutoSave() {
-  const selects = ['modelSelect', 'languageSelect', 'deviceSelect', 'translationSelect'];
+  const selects = ['modelSelect', 'languageSelect', 'deviceSelect', 'translationSelect', 'localModelSelect'];
 
   selects.forEach((id) => {
     const el = document.getElementById(id);
@@ -3445,7 +3441,7 @@ async function updateLocalModelStatus() {
   } else if (_localDownloading) {
     setSafeHtml(
       statusEl,
-      `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${d.localModelDownloadingHtml || 'Downloading Hy-MT2 Q4...'} <span id="localDlPercent">0%</span></div>
+      `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${d.localModelDownloadingHtml || 'Downloading Hy-MT2 Q8...'} <span id="localDlPercent">0%</span></div>
       <div style="height:4px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden;width:100%">
         <div id="localDlBar" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s;"></div>
       </div>`
@@ -3472,7 +3468,7 @@ if (window.electronAPI?.onLocalModelProgress) {
     if (!bar || !pct) {
       setSafeHtml(
         statusEl,
-        `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${I18N[currentUiLang].localModelDownloadingHtml || 'Downloading Hy-MT2 Q4...'} <span id="localDlPercent">${percent}%</span></div>
+        `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${I18N[currentUiLang].localModelDownloadingHtml || 'Downloading Hy-MT2 Q8...'} <span id="localDlPercent">${percent}%</span></div>
         <div style="height:4px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden;width:100%">
           <div id="localDlBar" style="height:100%;width:${percent}%;background:var(--accent);transition:width 0.3s;"></div>
         </div>`
@@ -4948,6 +4944,7 @@ async function saveApiKeys() {
   if (languageSelect) keys.selectedLanguage = languageSelect.value;
   if (deviceSelect) keys.selectedDevice = deviceSelect.value;
   if (translationSelect) keys.selectedTranslation = translationSelect.value;
+  keys.localModelId = getSelectedLocalModelId();
   if (uiLanguageSelect) keys.uiLanguage = uiLanguageSelect.value;
 
   const successMsg = {
@@ -5773,8 +5770,8 @@ async function renderModels() {
       whisperKey: null,
       name: 'Hy-MT2 · 1.8B',
       desc: 'Fast lightweight local translator.',
-      size: '1.13 GB',
-      vram: '~2.5 GB',
+      size: '1.91 GB',
+      vram: '~3 GB',
       speedKey: 'fast',
       category: 'translation',
       tag: 'MT',
@@ -5784,8 +5781,8 @@ async function renderModels() {
       whisperKey: null,
       name: 'Hy-MT2 · 7B',
       desc: 'High-quality local translator.',
-      size: '6.16 GB',
-      vram: '~8 GB',
+      size: '7.98 GB',
+      vram: '~10 GB',
       speedKey: 'medium',
       category: 'translation',
       tag: 'MT',

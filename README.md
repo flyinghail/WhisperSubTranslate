@@ -33,8 +33,8 @@ npm install
 npm start
 ```
 
-- Node.js >= 22.12.0 (see `engines` in package.json; Electron 43 toolchain)
-- whisper.cpp is downloaded during `npm install` (Windows gets the CUDA build ~700MB plus a Vulkan build ~23MB)
+- Node.js 22.x >= 22.13.0 or >= 24.0.0 (Electron 44 toolchain)
+- On Windows, `npm install` downloads the pinned CUDA/CPU engines. Vulkan is built from pinned source and requires CMake, Visual Studio C++ Build Tools and the Vulkan SDK; see [CONTRIBUTING.md](CONTRIBUTING.md).
 - FFmpeg is included via npm; the selected GGML model downloads on first use
 
 ### Linux
@@ -61,8 +61,8 @@ Translate subtitles fully offline with the bundled Tencent Hy-MT2 model, or rout
 
 | Engine                                           | Offline | API key | Cost            | Notes                                                                                    |
 | ------------------------------------------------ | :-----: | :-----: | --------------- | ---------------------------------------------------------------------------------------- |
-| Hy-MT2 1.8B (local, default)                     |   Yes   |   No    | Free            | ~1.13GB, VRAM 2GB / RAM 4GB, on-device                                                   |
-| Hy-MT2 7B (local)                                |   Yes   |   No    | Free            | ~6.16GB, VRAM 8GB / RAM 12GB, larger model                                               |
+| Hy-MT2 1.8B Q8 (local, default)                     |   Yes   |   No    | Free            | ~1.91GB, VRAM 3GB / RAM 6GB, on-device                                                   |
+| Hy-MT2 7B Q8 (local)                                |   Yes   |   No    | Free            | ~7.98GB, VRAM 10GB / RAM 16GB, larger model                                               |
 | MyMemory                                         |   No    |   No    | Free            | ~50K chars/day per IP                                                                    |
 | DeepL                                            |   No    |   Yes   | Free 500K/month | Deterministic output                                                                     |
 | OpenAI GPT-5.x (configurable, e.g. gpt-5.6-sol)  |   No    |   Yes   | Paid            | Default model; context-aware                                                             |

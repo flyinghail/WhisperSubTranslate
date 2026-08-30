@@ -10,23 +10,23 @@ WhisperSubTranslate itself.
 
 | Component | Version / artifact | License | Source |
 | --- | --- | --- | --- |
-| whisper.cpp | downloaded CLI + runtime DLLs (`whisper-cli.exe`, `whisper.dll`, `ggml*.dll`, CUDA build ~700MB) | MIT | [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp) |
+| whisper.cpp | v1.9.2; downloaded CUDA/CPU CLI, Vulkan built from pinned source; CLI + runtime DLLs (`whisper-cli.exe`, `whisper.dll`, `ggml*.dll`, CUDA build ~700MB) | MIT | [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp) |
 | Silero VAD model | `ggml-silero-v5.1.2.bin` (~0.9MB) | MIT (model weights) | [ggml-org/whisper-vad](https://huggingface.co/ggml-org/whisper-vad) |
 | Faster-Whisper-XXL (Sync engine) | `faster-whisper-xxl.exe` archive (~1.4GB, cuBLAS/cuDNN bundled) | GPL-3.0 | [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win) |
 | Whisper GGML models | `ggml-*.bin` (tiny…large-v3, downloaded on demand into `_models/`) | MIT | [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp) |
-| Hy-MT2 models | `Hy-MT2-1.8B-Q4_K_M.gguf` / `HY-MT2-7B-Q6_K.gguf` | Apache-2.0 | [tencent/Hy-MT2-GGUF](https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF), [repo](https://github.com/Tencent-Hunyuan/Hy-MT2) |
+| Hy-MT2 models | `Hy-MT2-1.8B-Q8_0.gguf` / `HY-MT2-7B-Q8_0.gguf` | Apache-2.0 | [tencent/Hy-MT2-GGUF](https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF), [repo](https://github.com/Tencent-Hunyuan/Hy-MT2) |
 
 ## npm dependencies (bundled into the app)
 
 | Package | Version | License |
 | --- | --- | --- |
 | 7zip-bin | 5.2.0 | MIT |
-| axios | 1.19.0 | MIT |
-| deepl-node | 1.27.0 | MIT |
+| axios | 1.20.0 | MIT |
+| deepl-node | 1.28.0 | MIT |
 | ffmpeg-static | 5.3.0 | GPL-3.0-or-later (bundles FFmpeg build) |
 | ffprobe-static | 3.1.0 | MIT |
-| node-llama-cpp | 3.18.1 | MIT (LLM inference backend) |
-| electron | 43.3.0 | MIT (runtime; Chromium/Node.js under their own licenses) |
+| node-llama-cpp | 3.20.0 | MIT (LLM inference backend) |
+| electron | 44.0.0 | MIT (runtime; Chromium/Node.js under their own licenses) |
 
 ## Notes
 

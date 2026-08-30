@@ -16,33 +16,35 @@ const MODELS = {
   '1.8b': {
     id: '1.8b',
     repo: 'tencent/Hy-MT2-1.8B-GGUF',
-    file: 'Hy-MT2-1.8B-Q4_K_M.gguf',
-    sizeBytes: 1_133_080_448, // ~1.13GB
-    displayName: 'Hy-MT2 1.8B Q4',
+    file: 'Hy-MT2-1.8B-Q8_0.gguf',
+    sizeBytes: 1_908_528_192, // exact Hugging Face Xet size (~1.91GB)
+    sha256: '5c3fe0b1408a5ceb0143184ef247b11b579c525f4b02b060e6c851bb76fef1a4',
+    displayName: 'Hy-MT2 1.8B Q8',
     requirements: {
-      vram: '2GB',
-      ram: '4GB',
-      diskGB: 1.2,
+      vram: '3GB',
+      ram: '6GB',
+      diskGB: 2.0,
       speed: '빠름',
     },
   },
   '7b': {
     id: '7b',
     repo: 'tencent/Hy-MT2-7B-GGUF',
-    file: 'HY-MT2-7B-Q6_K.gguf',
-    sizeBytes: 6_164_482_720, // ~6.16GB (Q6_K — higher quality tier)
-    displayName: 'Hy-MT2 7B Q6',
+    file: 'HY-MT2-7B-Q8_0.gguf',
+    sizeBytes: 7_981_928_896, // exact Hugging Face Xet size (~7.98GB)
+    sha256: '58b3ad55dd6f6fa08c695cddc34fb5f8f708a844f78ae10508071914b0ed67c0',
+    displayName: 'Hy-MT2 7B Q8',
     requirements: {
-      vram: '8GB',
-      ram: '12GB',
-      diskGB: 6.2,
+      vram: '10GB',
+      ram: '16GB',
+      diskGB: 8.0,
       speed: '느림 (고품질)',
     },
   },
 };
 const DEFAULT_MODEL_ID = '1.8b';
 const LOCAL_OPERATION_TIMEOUT_MS = 3 * 60 * 1000;
-// 7B Q6(6.16GB) 모델 로드는 느린 디스크/첫 실행에서 수 분이 걸릴 수 있어
+// 7B Q8(7.98GB) 모델 로드는 느린 디스크/첫 실행에서 수 분이 걸릴 수 있어
 // 추론(3분)과 분리된 별도 타임아웃을 둔다.
 const LOCAL_LOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -269,7 +271,7 @@ function isModelInstalled(modelId = DEFAULT_MODEL_ID) {
   if (!m) return false;
   try {
     const stat = fs.statSync(getModelPath(modelId));
-    return stat.size > m.sizeBytes * 0.95;
+    return stat.size === m.sizeBytes;
   } catch {
     return false;
   }
@@ -488,6 +490,11 @@ async function _downloadModelImpl(signal, modelId) {
               if (res.headers['content-length'] && downloaded !== total) {
                 return failPreservingTmp(
                   new Error(`Download incomplete: got ${downloaded} of ${total} bytes (model ${modelId})`)
+                );
+              }
+              if (downloaded !== m.sizeBytes) {
+                return failPreservingTmp(
+                  new Error(`Model size mismatch: got ${downloaded}, expected ${m.sizeBytes} bytes (model ${modelId})`)
                 );
               }
               fs.renameSync(tmp, dest);

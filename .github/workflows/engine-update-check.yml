@@ -1,6 +1,6 @@
 name: Engine update check
 
-# whisper.cpp는 scripts/postinstall.js의 WHISPER_CPP_VERSION으로 고정되어 있다.
+# package.json and scripts/whisper-runtime.json pin the stable engine and its artifacts.
 # 이 워크플로가 월 1회 업스트림 최신 릴리스를 확인하고, 새 버전이 있으면
 # 실제 음성 추출 테스트를 돌린 뒤 결과를 담은 PR을 연다.
 # 머지 여부는 사람이 결정한다 — 검증 없이 엔진이 바뀌는 일은 없다.
@@ -33,13 +33,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $m = Select-String -Path scripts/postinstall.js -Pattern "WHISPER_CPP_VERSION = '([^']+)'"
-          $pinned = $m.Matches[0].Groups[1].Value
-          $latest = gh api repos/ggml-org/whisper.cpp/releases/latest --jq .tag_name
+          $pinned = (Get-Content package.json -Raw | ConvertFrom-Json).whisperCppVersion
+          $releases = gh api 'repos/ggml-org/whisper.cpp/releases?per_page=100' | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot query upstream releases' }
+          $stable = $releases | Where-Object {
+            -not $_.prerelease -and -not $_.draft -and $_.tag_name -match '^v\d+\.\d+\.\d+$'
+          } | Sort-Object { [version]$_.tag_name.Substring(1) } -Descending | Select-Object -First 1
+          if (-not $stable) { throw 'No stable semantic-version release found' }
+          $latest = $stable.tag_name
           Write-Host "pinned=$pinned latest=$latest"
           "pinned=$pinned" >> $env:GITHUB_OUTPUT
           "latest=$latest" >> $env:GITHUB_OUTPUT
-          if ($pinned -eq $latest) {
+          if ([version]$pinned.Substring(1) -ge [version]$latest.Substring(1)) {
             Write-Host "Engine is up to date."
             "update=false" >> $env:GITHUB_OUTPUT
           } else {
@@ -88,13 +93,27 @@ jobs:
         run: |
           $pinned = $env:PINNED_VERSION
           $latest = $env:LATEST_TAG
-          (Get-Content scripts/postinstall.js -Raw) -replace `
-            "WHISPER_CPP_VERSION = '$pinned'", "WHISPER_CPP_VERSION = '$latest'" |
-            Set-Content scripts/postinstall.js -NoNewline
+          $release = gh api "repos/ggml-org/whisper.cpp/releases/tags/$latest" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $release.prerelease -or $release.draft) { throw 'Expected a stable release' }
+          $commit = gh api "repos/ggml-org/whisper.cpp/commits/$latest" --jq .sha
+          if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') { throw 'Invalid source commit' }
+          $manifest = Get-Content scripts/whisper-runtime.json -Raw | ConvertFrom-Json
+          foreach ($name in @($manifest.windowsAssets.PSObject.Properties.Name)) {
+            $asset = $release.assets | Where-Object name -eq $name
+            if (-not $asset -or $asset.digest -notmatch '^sha256:[0-9a-f]{64}$') { throw "Missing verified asset: $name" }
+            $manifest.windowsAssets.$name.size = $asset.size
+            $manifest.windowsAssets.$name.sha256 = $asset.digest.Substring(7)
+          }
+          $manifest.version = $latest
+          $manifest.sourceCommit = $commit
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content scripts/whisper-runtime.json
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $pkg.whisperCppVersion = $latest
+          $pkg | ConvertTo-Json -Depth 20 | Set-Content package.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "engine-update/$latest"
-          git add scripts/postinstall.js
+          git add package.json scripts/whisper-runtime.json
           git commit -m "chore(engine): bump whisper.cpp $pinned -> $latest"
           git push origin "engine-update/$latest"
           $lines = @(

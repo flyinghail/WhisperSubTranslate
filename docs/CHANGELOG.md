@@ -2,6 +2,14 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+- Upgrade stable runtimes to whisper.cpp v1.9.2, node-llama-cpp 3.20.0 and Electron 44.0.0; refresh application and development dependencies. Node.js 22.13+ (22.x) or 24+ is required.
+- Use Q8 for both Hy-MT2 1.8B and 7B, with exact model-size checks and updated resource requirements.
+- Preserve the chosen 1.8B/7B model across restarts and other settings changes; the initial default remains 1.8B.
+- Keep main's CUDA → Vulkan → CPU fallback; replace the unavailable Vulkan archive with a build from the pinned whisper.cpp commit. Release builds provision a verified Vulkan SDK automatically.
+- Upgrade existing whisper.cpp installations instead of retaining older binaries, and use mapped v1.9.2 token timestamps for subtitle end times.
+
 ## [2.5.0] - 2026-08-26
 
 Feature release adding Vulkan acceleration for compatible Windows GPUs, verified resumable downloads, and stronger release checks.

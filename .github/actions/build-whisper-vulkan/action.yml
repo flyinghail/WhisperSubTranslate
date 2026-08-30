@@ -1,0 +1,28 @@
+name: Build pinned whisper.cpp Vulkan
+description: Install a verified Vulkan SDK and build the pinned whisper.cpp source.
+runs:
+  using: composite
+  steps:
+    - name: Install pinned Vulkan SDK
+      shell: pwsh
+      run: |
+        $sdkVersion = '1.4.357.0'
+        $sdkSha256 = '81f474711e9042f4cd22b31b2f7a8870db2e428b21586fb43dd80150be97310d'
+        $installer = Join-Path $env:RUNNER_TEMP 'vulkan-sdk.exe'
+        Invoke-WebRequest -UseBasicParsing -OutFile $installer `
+          -Uri "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/vulkan_sdk.exe"
+        $actualSha = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualSha -ne $sdkSha256) {
+          throw "Vulkan SDK checksum mismatch: expected $sdkSha256, got $actualSha"
+        }
+        $sdkRoot = Join-Path $env:RUNNER_TEMP "VulkanSDK-$sdkVersion"
+        $install = Start-Process -FilePath $installer -Wait -PassThru -WindowStyle Hidden `
+          -ArgumentList '--root', $sdkRoot, '--accept-licenses', '--default-answer', `
+            '--confirm-command', 'install', 'copy_only=1'
+        if ($install.ExitCode -ne 0) { throw "Vulkan SDK installer exited with $($install.ExitCode)" }
+        "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
+        (Join-Path $sdkRoot 'Bin') | Out-File -FilePath $env:GITHUB_PATH -Append
+
+    - name: Build pinned whisper.cpp Vulkan runtime
+      shell: pwsh
+      run: scripts/build-whisper-vulkan.ps1 -SkipRuntimeProbe

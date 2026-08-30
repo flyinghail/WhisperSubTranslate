@@ -85,3 +85,25 @@ cp build/bin/whisper-cli /path/to/WhisperSubTranslate/whisper-cpp/
 ```
 
 On Windows, if the automatic download during `npm install` fails, download a build from the [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases) and extract it into the `whisper-cpp/` folder.
+
+## Windows Vulkan build
+
+The CUDA/CPU archives and Vulkan source use the same stable whisper.cpp version,
+pinned in `package.json` and `scripts/whisper-runtime.json`. Update the source
+commit and archive sizes/SHA-256 values together when upgrading. Nightly builds
+and prereleases are excluded from the engine update check.
+
+Install CMake, Visual Studio C++ Build Tools and the LunarG Vulkan SDK. Put
+CMake on PATH and set `VULKAN_SDK` to the SDK directory, then run:
+
+```powershell
+npm run build:whisper-vulkan
+npm install
+npm run check:full
+```
+
+The build verifies the source commit, stages the executable and DLLs, and replaces
+`whisper-cpp/vulkan` only after validation. Release CI installs the pinned SDK
+and builds Vulkan before installing dependencies; it does not depend on the
+removed standalone Vulkan download. `test:e2e:models` checks both model-selection
+directions across three actual Electron launches using temporary user data.

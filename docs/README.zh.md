@@ -33,8 +33,8 @@ npm install
 npm start
 ```
 
-- Node.js 20.19 以上或 22.12 以上 (Electron 43 构建工具链)
-- whisper.cpp 在 `npm install` 时自动下载 (Windows 包含约700MB 的 CUDA 版本和约23MB 的 Vulkan 版本)
+- Node.js 22.x（22.13.0 以上）或 24.0.0 以上（Electron 44 构建工具链）
+- Windows 下 `npm install` 下载固定版本的 CUDA/CPU 引擎；Vulkan 从固定源码构建，需要 CMake、Visual Studio C++ Build Tools 和 Vulkan SDK，详见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 - FFmpeg 通过 npm 自带；所选 GGML 模型在首次使用时下载
 
 ### Linux
@@ -59,8 +59,8 @@ npm run build-win   # 产物输出到 dist2/
 
 | 引擎                                       | 离线 | API 密钥 | 费用             | 备注                                                                     |
 | ------------------------------------------ | :--: | :------: | ---------------- | ------------------------------------------------------------------------ |
-| Hy-MT2 1.8B (本地，默认)                   |  是  |  不需要  | 免费             | 约1.13GB，显存 2GB / 内存 4GB，端侧                                      |
-| Hy-MT2 7B (本地)                           |  是  |  不需要  | 免费             | 约6.16GB，显存 8GB / 内存 12GB，更大模型                                 |
+| Hy-MT2 1.8B Q8 (本地，默认)                   |  是  |  不需要  | 免费             | 约1.91GB，显存 3GB / 内存 6GB，端侧                                      |
+| Hy-MT2 7B Q8 (本地)                           |  是  |  不需要  | 免费             | 约7.98GB，显存 10GB / 内存 16GB，更大模型                                 |
 | MyMemory                                   |  否  |  不需要  | 免费             | 每 IP 每天约5万字符                                                      |
 | DeepL                                      |  否  |   需要   | 每月50万字符免费 | 输出稳定                                                                 |
 | OpenAI GPT-5.x (可配置，默认 gpt-5.6-sol)  |  否  |   需要   | 付费             | 默认模型，上下文感知                                                     |

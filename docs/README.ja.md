@@ -33,8 +33,8 @@ npm install
 npm start
 ```
 
-- Node.js 20.19 以上または 22.12 以上 (Electron 43 ビルドツールチェーン)
-- whisper.cpp は `npm install` 時に自動ダウンロード (Windows は CUDA ビルド約700MB と Vulkan ビルド約23MB)
+- Node.js 22.x (22.13.0 以降) または 24.0.0 以降 (Electron 44 ビルドツールチェーン)
+- Windows の `npm install` は固定バージョンの CUDA/CPU エンジンを取得します。Vulkan は固定ソースからビルドするため、CMake、Visual Studio C++ Build Tools、Vulkan SDK が必要です。[CONTRIBUTING.md](../CONTRIBUTING.md) を参照してください。
 - FFmpeg は npm で同梱。選択した GGML モデルは初回使用時にダウンロード
 
 ### Linux
@@ -59,8 +59,8 @@ npm run build-win   # 成果物は dist2/ に出力されます
 
 | エンジン                                     | オフライン | API キー | 費用            | 備考                                                                     |
 | -------------------------------------------- | :--------: | :------: | --------------- | ------------------------------------------------------------------------ |
-| Hy-MT2 1.8B (ローカル、既定)                 |    はい    |   不要   | 無料            | 約1.13GB、VRAM 2GB / RAM 4GB、オンデバイス                               |
-| Hy-MT2 7B (ローカル)                         |    はい    |   不要   | 無料            | 約6.16GB、VRAM 8GB / RAM 12GB、大型モデル                                |
+| Hy-MT2 1.8B Q8 (ローカル、既定)                 |    はい    |   不要   | 無料            | 約1.91GB、VRAM 3GB / RAM 6GB、オンデバイス                               |
+| Hy-MT2 7B Q8 (ローカル)                         |    はい    |   不要   | 無料            | 約7.98GB、VRAM 10GB / RAM 16GB、大型モデル                                |
 | MyMemory                                     |   いいえ   |   不要   | 無料            | IP ごとに 1日 約5万文字                                                  |
 | DeepL                                        |   いいえ   |   必要   | 月50万文字 無料 | 出力が安定                                                               |
 | OpenAI GPT-5.x (設定可能、既定 gpt-5.6-sol)  |   いいえ   |   必要   | 有料            | 既定モデル、文脈認識                                                     |

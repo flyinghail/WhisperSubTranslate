@@ -17,19 +17,15 @@ const CLI_NAME = process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli
 const WHISPER_CLI = path.join(WHISPER_CPP_DIR, CLI_NAME);
 const CPU_DIR = path.join(WHISPER_CPP_DIR, 'cpu');
 const CPU_CLI = path.join(CPU_DIR, CLI_NAME);
-// whisper.cpp는 버전을 고정해 받는다. releases/latest를 따라가면 업스트림이
-// 새 빌드를 낼 때마다 검증하지 않은 엔진이 그대로 실려 나가고(v2.4.4가
-// 1.9.1 -> 1.9.2로 조용히 갈아끼운 사례), 같은 소스를 빌드해도 결과가
-// 달라져 문제 추적이 불가능해진다. 올릴 때는 이 태그를 바꾸고 릴리스
-// 워크플로우의 실제 자막 추출 검증을 통과시킨 뒤에 올린다.
-const WHISPER_CPP_VERSION = 'v1.9.1';
+// Stable release and matching Windows archives are reviewed together.
+const WHISPER_CPP_VERSION = require('../package.json').whisperCppVersion;
+const WHISPER_RUNTIME = require('./whisper-runtime.json');
+if (WHISPER_RUNTIME.version !== WHISPER_CPP_VERSION) {
+  throw new Error('whisper.cpp version and runtime manifest do not match');
+}
 const GITHUB_API = `https://api.github.com/repos/ggml-org/whisper.cpp/releases/tags/${WHISPER_CPP_VERSION}`;
-const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB limit for API response
+const MAX_RESPONSE_SIZE = 10 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
-const VULKAN_ARCHIVE_URL =
-  'https://github.com/Blue-B/WhisperSubTranslate/releases/download/whisper-vulkan-v1.9.1/whisper-vulkan-v1.9.1-win-x64.zip';
-const VULKAN_ARCHIVE_SHA256 = '9524205a8f74c69a327c2a4316d1cae2857c507b344a563bf55f0e45c7093f20';
-const VULKAN_ARCHIVE_NAME = 'whisper-vulkan-v1.9.1-win-x64.zip';
 
 // Silero VAD model (ggml) — lets whisper process only speech segments, which
 // removes the repeated/hallucinated lines whisper emits on silent/music parts
@@ -43,24 +39,8 @@ const VAD_MODEL_URL = `https://huggingface.co/ggml-org/whisper-vad/resolve/${VAD
 const VAD_MODEL_SIZE = 885098;
 const VAD_MODEL_SHA256 = '29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf';
 
-// whisper.cpp v1.9.1 Windows 아카이브는 자산 이름별로 크기와 SHA-256을 로컬 고정한다.
-// GitHub API 응답의 asset.digest는 응답 자체가 변조되면 함께 믿게 되므로,
-// API digest ↔ 로컬 고정값 ↔ 받은 바이트를 3중으로 대조한다(verifyWhisperAsset).
-// 값 출처: https://api.github.com/repos/ggml-org/whisper.cpp/releases/tags/v1.9.1
-const WHISPER_ASSET_MANIFEST = Object.freeze({
-  'whisper-cublas-12.4.0-bin-x64.zip': Object.freeze({
-    size: 677887125,
-    sha256: '106a2030eff8998e4ef320fe72e263a78449e9040386ee27c41ea80b001b601b',
-  }),
-  'whisper-cublas-11.8.0-bin-x64.zip': Object.freeze({
-    size: 278557654,
-    sha256: 'aecdce0e4d4bb758a7c72a31f3f9f19a7b6d861405fd2da743cd86398633c963',
-  }),
-  'whisper-bin-x64.zip': Object.freeze({
-    size: 7982101,
-    sha256: '7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539',
-  }),
-});
+// The API digest must agree with this locally reviewed manifest.
+const WHISPER_ASSET_MANIFEST = Object.freeze(WHISPER_RUNTIME.windowsAssets);
 
 // 스트리밍 해시. cublas 12.4 아카이브(~677MB)도 통째로 readFileSync하지 않는다.
 function sha256File(filePath) {
@@ -128,19 +108,6 @@ async function verifyWhisperAsset(asset, filePath) {
   await verifyPinnedDownload(asset.name, filePath, expected);
 }
 
-function findFileRecursive(dir, filename) {
-  if (!fs.existsSync(dir)) return null;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isFile() && entry.name.toLowerCase() === filename.toLowerCase()) return full;
-    if (entry.isDirectory()) {
-      const found = findFileRecursive(full, filename);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
 function hasVulkanRuntimeLibraries() {
   const dir = path.join(WHISPER_CPP_DIR, 'vulkan');
   return hasWhisperRuntimeLibraries(path.join(dir, CLI_NAME), dir) && fs.existsSync(path.join(dir, 'ggml-vulkan.dll'));
@@ -163,6 +130,29 @@ function hasWhisperRuntimeLibraries(cliPath = WHISPER_CLI, runtimeDir = WHISPER_
     windowsHide: true,
   });
   return result.status === 0;
+}
+
+function getWhisperRuntimeVersion(cliPath = WHISPER_CLI, runtimeDir = WHISPER_CPP_DIR) {
+  if (!fs.existsSync(cliPath)) return null;
+
+  const env = { ...process.env };
+  if (process.platform !== 'win32') {
+    const libraryPath = process.platform === 'darwin' ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
+    env[libraryPath] = [runtimeDir, env[libraryPath]].filter(Boolean).join(path.delimiter);
+  }
+
+  const result = spawnSync(cliPath, ['--version'], {
+    cwd: runtimeDir,
+    env,
+    encoding: 'utf8',
+    timeout: 10000,
+    windowsHide: true,
+  });
+  if (result.status !== 0) return null;
+
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  const match = output.match(/whisper\.cpp version:\s*v?(\d+\.\d+\.\d+)(?=\s|$)/i);
+  return match ? `v${match[1]}` : null;
 }
 
 /**
@@ -346,85 +336,30 @@ async function downloadFile(url, destPath) {
  */
 async function ensureVulkanBundle() {
   if (process.platform !== 'win32') return true;
-  if (!process.env.WHISPER_VULKAN_ARCHIVE && hasVulkanRuntimeLibraries()) {
-    clearInstallFailure('vulkan');
-    return true;
-  }
-
-  const root = path.join(__dirname, '..');
-  const archivePath = path.join(root, `whisper-vulkan-temp-${process.pid}.zip`);
-  const extractDir = path.join(root, `whisper-vulkan-extract-${process.pid}`);
-  const stagingDir = path.join(root, `whisper-vulkan-staging-${process.pid}`);
   const vulkanDir = path.join(WHISPER_CPP_DIR, 'vulkan');
-  const backupDir = `${vulkanDir}.previous`;
-  let hadBackup = false;
-  let installedNewBundle = false;
+  const cli = path.join(vulkanDir, CLI_NAME);
   try {
-    const override = process.env.WHISPER_VULKAN_ARCHIVE;
-    if (override) {
-      const filePath = override.startsWith('file://') ? decodeURIComponent(new URL(override).pathname) : override;
-      const localPath = filePath.startsWith('/') && /^[A-Za-z]:/.test(filePath.slice(1)) ? filePath.slice(1) : filePath;
-      if (!path.isAbsolute(localPath) || !fs.existsSync(localPath)) {
-        throw new Error(`Vulkan archive override does not exist: ${localPath}`);
-      }
-      fs.copyFileSync(localPath, archivePath);
-      console.log(`  [vulkan] Using local archive override: ${localPath}`);
-    } else {
-      console.log(`  [vulkan] Downloading ${VULKAN_ARCHIVE_NAME}...`);
-      await downloadFile(VULKAN_ARCHIVE_URL, archivePath);
+    // An installed but outdated runtime must not silently survive an engine upgrade.
+    if (getWhisperRuntimeVersion(cli, vulkanDir) !== WHISPER_CPP_VERSION || !hasVulkanRuntimeLibraries()) {
+      console.log(`  [vulkan] Building whisper.cpp ${WHISPER_CPP_VERSION} from pinned source...`);
+      execFileSync(
+        'powershell',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'build-whisper-vulkan.ps1')],
+        { stdio: 'inherit', windowsHide: true, timeout: 30 * 60 * 1000 }
+      );
     }
-    // 23MB 아카이브도 스트리밍 해시(await sha256File)로 검증한다.
-    if ((await sha256File(archivePath)) !== VULKAN_ARCHIVE_SHA256) {
-      throw new Error('Vulkan archive SHA-256 verification failed');
+    if (getWhisperRuntimeVersion(cli, vulkanDir) !== WHISPER_CPP_VERSION || !hasVulkanRuntimeLibraries()) {
+      throw new Error('Vulkan runtime is incomplete or does not match the pinned engine version');
     }
-
-    fs.rmSync(extractDir, { recursive: true, force: true });
-    fs.rmSync(stagingDir, { recursive: true, force: true });
-    fs.mkdirSync(extractDir, { recursive: true });
-    fs.mkdirSync(stagingDir, { recursive: true });
-    await extractZip(archivePath, extractDir);
-
-    const cli = findFileRecursive(extractDir, CLI_NAME);
-    const vulkanDll = findFileRecursive(extractDir, 'ggml-vulkan.dll');
-    if (!cli || !vulkanDll) throw new Error('Vulkan archive is missing whisper-cli.exe or ggml-vulkan.dll');
-    const sourceDir = path.dirname(cli);
-    for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-      if (!entry.isFile()) continue;
-      fs.copyFileSync(path.join(sourceDir, entry.name), path.join(stagingDir, entry.name));
-    }
-    if (!fs.existsSync(path.join(stagingDir, CLI_NAME)) || !fs.existsSync(path.join(stagingDir, 'ggml-vulkan.dll'))) {
-      throw new Error('Vulkan staging directory is incomplete');
-    }
-
-    fs.rmSync(backupDir, { recursive: true, force: true });
-    if (fs.existsSync(vulkanDir)) {
-      fs.renameSync(vulkanDir, backupDir);
-      hadBackup = true;
-    }
-    fs.renameSync(stagingDir, vulkanDir);
-    installedNewBundle = true;
-    if (!hasVulkanRuntimeLibraries()) throw new Error('Vulkan runtime probe failed after installation');
-    fs.rmSync(backupDir, { recursive: true, force: true });
-    hadBackup = false;
     clearInstallFailure('vulkan');
-    console.log('  [vulkan] Vulkan whisper.cpp bundle installed.');
     return true;
   } catch (error) {
-    if (installedNewBundle) fs.rmSync(vulkanDir, { recursive: true, force: true });
-    if (hadBackup && fs.existsSync(backupDir)) {
-      try {
-        fs.renameSync(backupDir, vulkanDir);
-      } catch (restoreError) {
-        console.warn(`  [WARN] Failed to restore previous Vulkan bundle: ${restoreError.message}`);
-      }
-    }
     markInstallFailure('vulkan', error.message);
     console.log(`  [WARN] Vulkan bundle unavailable: ${error.message}`);
+    console.log(
+      '  Install CMake, Visual Studio C++ Build Tools and the Vulkan SDK, then run npm run build:whisper-vulkan.'
+    );
     return false;
-  } finally {
-    fs.rmSync(archivePath, { force: true });
-    fs.rmSync(extractDir, { recursive: true, force: true });
-    fs.rmSync(stagingDir, { recursive: true, force: true });
   }
 }
 
@@ -435,8 +370,9 @@ function extractZip(archivePath, destDir) {
       execFileSync('tar', ['-xzf', archivePath, '-C', destDir], { stdio: 'inherit' });
     } else if (process.platform === 'win32') {
       console.log('  Extracting...');
-      const psCommand = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
-      execFileSync('powershell', ['-NoProfile', '-Command', psCommand], {
+      const sevenZip = require('7zip-bin').path7za;
+      fs.mkdirSync(destDir, { recursive: true });
+      execFileSync(sevenZip, ['x', '-y', '-aoa', `-o${destDir}`, archivePath], {
         stdio: 'inherit',
         windowsHide: true,
       });
@@ -458,9 +394,9 @@ function moveFilesUp(sourceDir, destDir) {
   for (const file of files) {
     const src = path.join(sourceDir, file);
     const dest = path.join(destDir, file);
-    if (!fs.existsSync(dest)) {
-      fs.renameSync(src, dest);
-    }
+    // Replace files from the previous engine; keep unrelated model/backend directories.
+    fs.cpSync(src, dest, { recursive: true, force: true });
+    fs.rmSync(src, { recursive: true, force: true });
   }
   // Remove empty directory
   try {
@@ -680,20 +616,19 @@ function ensureLlamaBinaries() {
     '@node-llama-cpp/mac-x64',
   ];
   const root = path.join(__dirname, '..');
+  const version = require(path.join(root, 'node_modules', 'node-llama-cpp', 'package.json')).version;
   const missing = required.filter((pkg) => {
-    return !fs.existsSync(path.join(root, 'node_modules', pkg, 'package.json'));
+    try {
+      return (
+        JSON.parse(fs.readFileSync(path.join(root, 'node_modules', pkg, 'package.json'), 'utf8')).version !== version
+      );
+    } catch {
+      return true;
+    }
   });
   if (missing.length === 0) {
-    console.log('  [llama] All cross-platform binaries already installed.');
+    console.log('  [llama] All cross-platform binaries match node-llama-cpp.');
     return [];
-  }
-  // Read version from main node-llama-cpp
-  let version = '3.18.1';
-  try {
-    const main = require(path.join(root, 'node_modules', 'node-llama-cpp', 'package.json'));
-    version = main.version || version;
-  } catch (_e) {
-    /* ignore */
   }
   console.log(`\n  [llama] Installing ${missing.length} cross-platform binary package(s)...`);
   // npm honors os/cpu fields in package.json and skips non-matching optionalDependencies
@@ -756,8 +691,13 @@ async function main() {
 
   console.log('\n[postinstall] Checking whisper-cpp...\n');
 
-  // Skip if already installed
-  if (hasWhisperRuntimeLibraries()) {
+  const installedVersion = getWhisperRuntimeVersion();
+  const cpuVersion = getWhisperRuntimeVersion(CPU_CLI, CPU_DIR);
+  if (
+    installedVersion === WHISPER_CPP_VERSION &&
+    (process.platform !== 'win32' || cpuVersion === WHISPER_CPP_VERSION) &&
+    hasWhisperRuntimeLibraries()
+  ) {
     console.log('  whisper-cpp already installed. Skipping.\n');
     clearInstallFailure('whisper');
     // VAD 모델과 Vulkan 번들은 이전 실패로 누락됐을 수 있으니 조기 반환 전에도 확인한다.
@@ -776,7 +716,7 @@ async function main() {
     // 1. Fetch the pinned release info
     console.log(`  Fetching whisper.cpp ${WHISPER_CPP_VERSION} release info...`);
     const release = await fetchPinnedWhisperRelease();
-    if (release.tag_name !== WHISPER_CPP_VERSION) {
+    if (release.tag_name !== WHISPER_CPP_VERSION || release.prerelease || release.draft) {
       throw new Error(`Expected whisper.cpp ${WHISPER_CPP_VERSION} but the API returned ${release.tag_name}`);
     }
 
@@ -934,7 +874,11 @@ async function main() {
     }
 
     // 9. Download CPU fallback build (when main build is CUDA, Windows only)
-    if (process.platform === 'win32' && isCudaBuild && !fs.existsSync(CPU_CLI)) {
+    if (
+      process.platform === 'win32' &&
+      isCudaBuild &&
+      getWhisperRuntimeVersion(CPU_CLI, CPU_DIR) !== WHISPER_CPP_VERSION
+    ) {
       const cpuAsset = release.assets.find(
         (a) => a.name.includes('bin') && a.name.endsWith('.zip') && !a.name.includes('cublas') && a.name.includes('x64')
       );
@@ -1048,7 +992,11 @@ async function main() {
 
   // whisper-cpp 설치가 불완전하면 실패 마커 (런타임에서 경고 표시 가능).
   // 성공 경로에서는 이전 실패 마커를 제거한다 (LOW-5).
-  if (hasWhisperRuntimeLibraries()) {
+  if (
+    getWhisperRuntimeVersion() === WHISPER_CPP_VERSION &&
+    hasWhisperRuntimeLibraries() &&
+    (process.platform !== 'win32' || getWhisperRuntimeVersion(CPU_CLI, CPU_DIR) === WHISPER_CPP_VERSION)
+  ) {
     clearInstallFailure('whisper');
   } else {
     markInstallFailure('whisper', 'runtime libraries are missing or broken');
@@ -1133,6 +1081,9 @@ if (require.main === module) {
 }
 
 module.exports = {
+  WHISPER_CPP_VERSION,
+  getWhisperRuntimeVersion,
+  moveFilesUp,
   hasWhisperRuntimeLibraries,
   hasVulkanRuntimeLibraries,
   ensureVulkanBundle,

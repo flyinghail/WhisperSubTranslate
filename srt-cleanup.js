@@ -423,9 +423,9 @@ function _msToSrtTime(ms) {
 // 과정에서 무음 경계에 걸친 세그먼트의 끝 시각이 그 빈 구간만큼 늘어난다(예: "ありがとう"
 // 59.85s→87.26s = 27초). 그래서 짧은 한 마디가 수십 초 화면에 박혀 있고 싱크가 안 맞는다.
 //
-// 주의: -ojf JSON의 토큰 offsets는 VAD 압축 타임라인(세그먼트 내부/누적)이라 원본 시각으로
-// 복원 불가능하다(실측: 1초짜리 세그먼트 토큰이 15s를 가리킴). 원본 시각으로 믿을 수 있는
-// 건 세그먼트 from/to뿐이고, 그건 정확하도(41.37s≈SDH) 늘어난 것만 문제다.
+// whisper.cpp v1.9.2부터 -ojf 토큰 offsets도 VAD가 제거한 무음을 원본 타임라인에
+// 되매핑한다. 정상 범위의 토큰 끝시각이 있으면 이를 우선 사용하고, 구형 런타임이나
+// 토큰 정보가 없는 JSON은 기존 세그먼트+문자수 상한 방식으로 안전하게 폴백한다.
 //
 // 해결: 세그먼트 시작(정확)은 그대로 쓰고, 길이만 텍스트 분량에 비례한 상한으로 캅한다.
 // 일반 대사는 원본 길이 그대로(공식 자막과 일치), 늘어진 것만 자연스러운 읽기 시간으로 줄어들어
@@ -433,6 +433,26 @@ function _msToSrtTime(ms) {
 function _displayMsForText(text, perCharMs, minMs, maxMs) {
   const n = String(text).replace(/\s/g, '').length;
   return Math.max(minMs, Math.min(maxMs, n * perCharMs));
+}
+
+function _mappedTokenEnd(segment, segmentStart, segmentEnd) {
+  if (!segment || !Array.isArray(segment.tokens)) return null;
+  const offsets = segment.tokens
+    .filter((token) => {
+      const text = String(token?.text || '').trim();
+      return text && !/^\[_.*\]$/.test(text);
+    })
+    .map((token) => token?.offsets)
+    .filter((offset) => Number.isFinite(offset?.from) && Number.isFinite(offset?.to));
+  if (!offsets.length) return null;
+
+  const first = Math.min(...offsets.map((offset) => offset.from));
+  const last = Math.max(...offsets.map((offset) => offset.to));
+  // v1.9.1 VAD token times live on the silence-compressed timeline. Reject
+  // those values (and malformed JSON) unless the real tokens fit this segment.
+  const toleranceMs = 250;
+  if (first < segmentStart - toleranceMs || last > segmentEnd + toleranceMs || last <= segmentStart) return null;
+  return Math.min(last, segmentEnd);
 }
 
 /**
@@ -465,9 +485,11 @@ function srtFromWhisperJson(jsonText, opts = {}) {
     const segEnd = typeof o.to === 'number' ? o.to : null;
     if (start == null || segEnd == null || segEnd <= start) continue;
 
-    // 세그먼트 길이가 텍스트가 자연스럽게 차지할 시간보다 길면(=늘어진 것) 그만큼만 보여준다.
+    // v1.9.2의 원본 타임라인 token end를 우선 사용한다. 구형/불완전 JSON은
+    // 세그먼트 길이가 자연스러운 읽기 시간보다 길 때만 문자수 상한으로 줄인다.
+    const tokenEnd = _mappedTokenEnd(s, start, segEnd);
     const natural = _displayMsForText(text, perCharMs, minDisplayMs, maxDisplayMs);
-    let end = Math.min(segEnd, start + natural);
+    let end = tokenEnd == null ? Math.min(segEnd, start + natural) : tokenEnd;
     if (end <= start) end = start + minDisplayMs;
     cues.push({ start, end, text });
   }

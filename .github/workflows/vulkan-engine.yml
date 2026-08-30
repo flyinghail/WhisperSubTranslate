@@ -1,0 +1,19 @@
+name: Vulkan engine build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-whisper-vulkan
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: whisper-cpp-vulkan-win-x64
+          path: whisper-cpp/vulkan/
+          if-no-files-found: error
+          retention-days: 7

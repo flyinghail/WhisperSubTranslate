@@ -1,0 +1,18 @@
+{
+  "version": "v1.9.2",
+  "sourceCommit": "306c88f4d1286aec1bf96e544632897886af5501",
+  "windowsAssets": {
+    "whisper-cublas-12.4.0-bin-x64.zip": {
+      "size": 670611449,
+      "sha256": "443110ddaad70d4290ab2e77179e31cf712035bbc4fad56bb4519a90c917b39c"
+    },
+    "whisper-cublas-11.8.0-bin-x64.zip": {
+      "size": 269446789,
+      "sha256": "1776668730f5594a0b15f930225779e863dd8280397f9ee7c6e47ccf82bbb203"
+    },
+    "whisper-bin-x64.zip": {
+      "size": 8194445,
+      "sha256": "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a"
+    }
+  }
+}

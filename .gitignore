@@ -8,3 +8,6 @@ artifacts/
 temp/
 ffprobe.exe
 RELEASE_BODY.md
+
+# Temporary pinned Vulkan source builds
+wvk-*/

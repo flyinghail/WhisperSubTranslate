@@ -47,6 +47,9 @@ jobs:
           }
           Write-Host "Tag $tag matches package.json version $pkg"
 
+      - name: Build pinned Vulkan runtime
+        uses: ./.github/actions/build-whisper-vulkan
+
       # postinstall.js downloads the prebuilt whisper.cpp (whisper-cli.exe).
       # GITHUB_TOKEN raises the GitHub API rate limit used during that fetch.
       - name: Install dependencies

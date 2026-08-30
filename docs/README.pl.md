@@ -33,8 +33,8 @@ npm install
 npm start
 ```
 
-- Node.js >= 20.19 lub >= 22.12 (łańcuch narzędzi Electron 43)
-- whisper.cpp jest pobierany podczas `npm install` (Windows otrzymuje wersję CUDA ~700MB oraz wersję Vulkan ~23MB)
+- Node.js 22.x (od 22.13.0) lub od 24.0.0 (narzędzia Electron 44)
+- W Windows `npm install` pobiera przypięte silniki CUDA/CPU. Vulkan jest budowany z przypiętego źródła i wymaga CMake, Visual Studio C++ Build Tools oraz Vulkan SDK. Zobacz [CONTRIBUTING.md](../CONTRIBUTING.md).
 - FFmpeg jest dołączony przez npm; wybrany model GGML pobiera się przy pierwszym użyciu
 
 ### Linux
@@ -59,8 +59,8 @@ Tłumacz napisy w pełni offline dołączonym modelem Tencent Hy-MT2 albo kieruj
 
 | Silnik                                                  | Offline | Klucz API | Koszt              | Uwagi                                                                                         |
 | ------------------------------------------------------- | :-----: | :-------: | ------------------ | --------------------------------------------------------------------------------------------- |
-| Hy-MT2 1.8B (lokalny, domyślny)                         |   Tak   |    Nie    | Darmowy            | ~1,13GB, VRAM 2GB / RAM 4GB, na urządzeniu                                                    |
-| Hy-MT2 7B (lokalny)                                     |   Tak   |    Nie    | Darmowy            | ~6,16GB, VRAM 8GB / RAM 12GB, większy model                                                   |
+| Hy-MT2 1.8B Q8 (lokalny, domyślny)                         |   Tak   |    Nie    | Darmowy            | ~1,13GB, VRAM 3GB / RAM 6GB, na urządzeniu                                                    |
+| Hy-MT2 7B Q8 (lokalny)                                     |   Tak   |    Nie    | Darmowy            | ~6,16GB, VRAM 10GB / RAM 16GB, większy model                                                   |
 | MyMemory                                                |   Nie   |    Nie    | Darmowy            | ~50K znaków/dzień na IP                                                                       |
 | DeepL                                                   |   Nie   |    Tak    | 500K/mies. darmowo | Stabilny wynik                                                                                |
 | OpenAI GPT-5.x (konfigurowalny, domyślnie gpt-5.6-sol)  |   Nie   |    Tak    | Płatny             | Domyślny model, świadomy kontekstu                                                            |

@@ -17,6 +17,8 @@ const {
   verifyPinnedDownload,
   verifyWhisperAsset,
   WHISPER_ASSET_MANIFEST,
+  getWhisperRuntimeVersion,
+  moveFilesUp,
 } = require('./postinstall');
 const { applySrtCleanup, isSdhOnlyText, srtFromWhisperJson } = require('../srt-cleanup');
 const {
@@ -155,11 +157,12 @@ async function runPostinstallDigestGuards() {
 }
 
 function runVulkanBundleManifest() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'postinstall.js'), 'utf8');
-  assert.match(source, /WHISPER_VULKAN_ARCHIVE/);
-  assert.match(source, /VULKAN_ARCHIVE_SHA256/);
-  assert.match(source, /hasVulkanRuntimeLibraries/);
-  console.log('[VulkanBundle] pinned archive hash and local override seam are wired (ok)');
+  const manifest = require('./whisper-runtime.json');
+  assert.strictEqual(manifest.version, require('../package.json').whisperCppVersion);
+  assert.match(manifest.version, /^v\d+\.\d+\.\d+$/);
+  assert.match(manifest.sourceCommit, /^[0-9a-f]{40}$/);
+  assert.ok(manifest.windowsAssets['whisper-bin-x64.zip']);
+  console.log('[VulkanBundle] stable version and source/artifact pins agree (ok)');
 }
 
 async function runVerifiedDownloader() {
@@ -846,6 +849,18 @@ function runSrtFromWhisperJson() {
   assert.ok(/00:01:27,260 --> /.test(srt), '다음 대사는 실제 발화 시각에 뜨');
 
   // 폴백: 깨진 JSON/빈 입력은 null (호출측이 -osrt로 폴백)
+  const mapped = srtFromWhisperJson(
+    JSON.stringify({
+      transcription: [
+        {
+          text: 'hello',
+          offsets: { from: 10000, to: 20000 },
+          tokens: [{ text: 'hello', offsets: { from: 10000, to: 11200 } }],
+        },
+      ],
+    })
+  );
+  assert.match(mapped, /00:00:10,000 --> 00:00:11,200/);
   assert.strictEqual(srtFromWhisperJson('not json'), null);
   assert.strictEqual(srtFromWhisperJson('{"transcription":[]}'), null);
   assert.strictEqual(srtFromWhisperJson(''), null);
@@ -855,6 +870,16 @@ function runWhisperRuntimeProbe() {
   const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-runtime-probe-'));
   try {
     assert.strictEqual(hasWhisperRuntimeLibraries(path.join(runtimeDir, 'missing-cli'), runtimeDir), false);
+    assert.strictEqual(getWhisperRuntimeVersion(path.join(runtimeDir, 'missing-cli'), runtimeDir), null);
+    assert.strictEqual(getWhisperRuntimeVersion(process.execPath, path.dirname(process.execPath)), null);
+    const from = path.join(runtimeDir, 'Release');
+    fs.mkdirSync(from);
+    fs.writeFileSync(path.join(from, 'whisper.dll'), 'new engine');
+    fs.writeFileSync(path.join(runtimeDir, 'whisper.dll'), 'old engine');
+    fs.writeFileSync(path.join(runtimeDir, 'user-model.bin'), 'keep');
+    moveFilesUp(from, runtimeDir);
+    assert.strictEqual(fs.readFileSync(path.join(runtimeDir, 'whisper.dll'), 'utf8'), 'new engine');
+    assert.strictEqual(fs.readFileSync(path.join(runtimeDir, 'user-model.bin'), 'utf8'), 'keep');
     assert.strictEqual(hasWhisperRuntimeLibraries(process.execPath, path.dirname(process.execPath)), true);
   } finally {
     fs.rmSync(runtimeDir, { recursive: true, force: true });
@@ -871,14 +896,16 @@ async function runModelResumeDiskSpace() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-model-resume-'));
   const controller = new AbortController();
   let rangeHeader = '';
+  const model = localTranslator.MODELS[localTranslator.DEFAULT_MODEL_ID];
+  const originalModelSize = model.sizeBytes;
+  const partialSize = model.sizeBytes - 300 * 1024 * 1024;
 
   try {
     require.cache[electronPath].exports = { app: { getPath: () => root } };
-    const model = localTranslator.MODELS[localTranslator.DEFAULT_MODEL_ID];
     const tmp = path.join(root, 'hy-mt-models', model.file + '.tmp');
     fs.mkdirSync(path.dirname(tmp), { recursive: true });
     fs.writeFileSync(tmp, '');
-    fs.truncateSync(tmp, 800 * 1024 * 1024);
+    fs.truncateSync(tmp, partialSize);
     // 전체 모델+예비 공간은 부족하지만, 남은 333MB+예비 공간은 충분한 상태.
     fs.statfsSync = () => ({ bavail: 900, bsize: 1024 * 1024 });
     https.get = (_url, options) => {
@@ -890,11 +917,15 @@ async function runModelResumeDiskSpace() {
     };
 
     await assert.rejects(() => localTranslator.downloadModel(null, controller.signal), /ABORTED: resume probe/);
-    assert.strictEqual(rangeHeader, 'bytes=838860800-', 'disk guard must allow download resume from the partial size');
+    assert.strictEqual(
+      rangeHeader,
+      `bytes=${partialSize}-`,
+      'disk guard must allow download resume from the partial size'
+    );
 
     // Range를 무시한 200 응답에서 전체 재다운로드 공간이 부족하면 partial을 지우지 않는다.
     fs.writeFileSync(tmp, '');
-    fs.truncateSync(tmp, 800 * 1024 * 1024);
+    fs.truncateSync(tmp, partialSize);
     const controller2 = new AbortController();
     https.get = (_url, options, callback) => {
       rangeHeader = options?.headers?.Range || '';
@@ -909,8 +940,8 @@ async function runModelResumeDiskSpace() {
       return request;
     };
     await assert.rejects(() => localTranslator.downloadModel(null, controller2.signal), /Not enough disk space/);
-    assert.strictEqual(rangeHeader, 'bytes=838860800-');
-    assert.strictEqual(fs.statSync(tmp).size, 800 * 1024 * 1024, 'Range-ignored disk failure must preserve partial');
+    assert.strictEqual(rangeHeader, `bytes=${partialSize}-`);
+    assert.strictEqual(fs.statSync(tmp).size, partialSize, 'Range-ignored disk failure must preserve partial');
 
     fs.writeFileSync(tmp, 'resume-me');
     fs.statfsSync = () => ({ bavail: 4096, bsize: 1024 * 1024 });
@@ -924,6 +955,7 @@ async function runModelResumeDiskSpace() {
     assert.strictEqual(fs.readFileSync(tmp, 'utf8'), 'resume-me', 'network failures must preserve resumable data');
 
     fs.rmSync(tmp, { force: true });
+    model.sizeBytes = 3; // Small complete payload for the mocked network.
     let firstProgressCalls = 0;
     let redirectRequests = 0;
     https.get = (_url, _options, callback) => {
@@ -948,7 +980,13 @@ async function runModelResumeDiskSpace() {
     };
     await localTranslator.downloadModel(() => firstProgressCalls++);
     assert.ok(firstProgressCalls > 0, 'the first download caller must receive progress');
+    const destination = localTranslator.getModelPath();
+    fs.unlinkSync(destination);
+    model.sizeBytes = 4;
+    await assert.rejects(() => localTranslator.downloadModel(null), /Model size mismatch/);
+    assert.strictEqual(fs.existsSync(destination), false, 'a complete but wrong-size response is not installed');
   } finally {
+    model.sizeBytes = originalModelSize;
     https.get = originalGet;
     fs.statfsSync = originalStatfs;
     require.cache[electronPath].exports = originalElectron;
@@ -1931,6 +1969,11 @@ async function run() {
   assert.deepStrictEqual(parsed.translations, ['안녕']);
   assert.throws(() => translator.parseContextAwareJson('not json'), /Invalid context-aware translation response/);
 
+  assert.strictEqual(translator.hydrateApiConfig({ localModelId: '7b' }).localModelId, '7b');
+  assert.strictEqual(translator.hydrateApiConfig({ localModelId: '1.8b' }).localModelId, '1.8b');
+  assert.strictEqual(translator.hydrateApiConfig({ localModelId: 'unknown' }).localModelId, '1.8b');
+  assert.strictEqual(translator.getDefaultConfig().localModelId, '1.8b');
+  for (const model of Object.values(localTranslator.MODELS)) assert.match(model.file, /Q8_0\.gguf$/);
   runSrtCleanup();
   runSrtFromWhisperJson();
   await runDownloadStreamSafety();
